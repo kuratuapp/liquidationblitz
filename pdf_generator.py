@@ -264,11 +264,11 @@ class PDFGenerator:
 
         financial_data = [
             ['Metric', 'Amount'],
-            ['Total Client Cost', f"${client_cost:,.2f}"],
-            ['Total Original Retail', f"${retail_value:,.2f}"],
-            ['Total Savings', f"${retail_value - client_cost:,.2f}"],
+            ['Total Client Cost', f"${int(client_cost):,d}"],
+            ['Total Original Retail', f"${int(retail_value):,d}"],
+            ['Total Savings', f"${int(retail_value - client_cost):,d}"],
             ['Average Discount', f"{discount_percent:.1f}%"],
-            ['Average Item Cost', f"${batch.avg_item_cost:.2f}"],
+            ['Average Item Cost', f"${int(batch.avg_item_cost):,d}"],
             ['Unique Items', f"{batch.total_items:,}"],
         ]
 
@@ -418,9 +418,9 @@ class PDFGenerator:
         <b>Size:</b> {item.size}<br/>
         <b>Color:</b> {item.color}<br/>
         <br/>
-        <b>Client Cost:</b> <font color="#d32f2f">${item.client_cost:.2f}</font> <font color="#666666">(each)</font><br/>
-        <b>Total Cost:</b> <font color="#d32f2f">${item.total_client_cost:.2f}</font><br/>
-        <b>Original Retail:</b> <font color="#666666">${item.original_retail:.2f}</font> <font color="#666666">(each)</font><br/>
+        <b>Client Cost:</b> <font color="#d32f2f">${int(item.client_cost):,d}</font> <font color="#666666">(each)</font><br/>
+        <b>Total Cost:</b> <font color="#d32f2f">${int(item.total_client_cost):,d}</font><br/>
+        <b>Original Retail:</b> <font color="#666666">${int(item.original_retail):,d}</font> <font color="#666666">(each)</font><br/>
         <b>Savings:</b> <font color="#2e7d32">{profit_margin:.0f}% off retail</font><br/>
         <br/>
         <b>Vendor:</b> {item.vendor_name.split('/')[0] if '/' in item.vendor_name else item.vendor_name}<br/>

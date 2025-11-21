@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import pandas as pd
+import math
 
 
 @dataclass
@@ -109,6 +110,25 @@ class LiquidationBatch:
             size = item.size or "Unknown"
             sizes[size] = sizes.get(size, 0) + 1
         return dict(sorted(sizes.items(), key=lambda x: x[1], reverse=True))
+
+    def apply_markup(self, markup_percentage: float) -> None:
+        """
+        Apply markup percentage to all item prices (rounded up to integers).
+        Updates both individual item costs and batch total.
+
+        Args:
+            markup_percentage: Markup percentage (e.g., 25.0 for 25%)
+        """
+        for item in self.items:
+            # Apply markup and round UP to nearest integer
+            new_client_cost = math.ceil(item.client_cost * (1 + markup_percentage / 100.0))
+            item.client_cost = float(new_client_cost)
+
+            # Update total client cost for this item
+            item.total_client_cost = item.client_cost * item.original_qty
+
+        # Update batch summary total to match sum of items
+        self.summary.total_client_cost = sum(item.total_client_cost for item in self.items)
 
 
 class BatchProcessor:

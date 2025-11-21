@@ -240,6 +240,67 @@ class S3Manager:
         logger.info(f"Uploaded {len([u for u in s3_urls if u])} images for batch {batch_number}")
         return s3_urls
 
+    def delete_pdf_from_s3(self, batch_number: str) -> bool:
+        """
+        Delete PDF file from S3.
+
+        Args:
+            batch_number: Batch/lot number
+
+        Returns:
+            True if deleted successfully, False otherwise
+        """
+        s3_key = f"{Config.S3_PDF_PREFIX}batch-{batch_number}.pdf"
+
+        try:
+            self.s3_client.delete_object(
+                Bucket=Config.AWS_BUCKET_PDFS,
+                Key=s3_key
+            )
+            logger.info(f"PDF deleted from S3: {s3_key}")
+            return True
+        except ClientError as e:
+            logger.error(f"Failed to delete PDF from S3: {e}")
+            return False
+
+    def delete_images_from_s3(self, batch_number: str) -> bool:
+        """
+        Delete all images for a batch from S3.
+
+        Args:
+            batch_number: Batch/lot number
+
+        Returns:
+            True if deleted successfully, False otherwise
+        """
+        # List all objects in the batch images folder
+        prefix = f"{Config.S3_IMAGES_PREFIX}batch-{batch_number}/"
+
+        try:
+            # List all objects with this prefix
+            response = self.s3_client.list_objects_v2(
+                Bucket=Config.AWS_BUCKET_IMAGES,
+                Prefix=prefix
+            )
+
+            if 'Contents' in response:
+                # Delete all objects
+                objects_to_delete = [{'Key': obj['Key']} for obj in response['Contents']]
+
+                if objects_to_delete:
+                    self.s3_client.delete_objects(
+                        Bucket=Config.AWS_BUCKET_IMAGES,
+                        Delete={'Objects': objects_to_delete}
+                    )
+                    logger.info(f"Deleted {len(objects_to_delete)} images for batch {batch_number}")
+            else:
+                logger.info(f"No images found for batch {batch_number}")
+
+            return True
+        except ClientError as e:
+            logger.error(f"Failed to delete images from S3: {e}")
+            return False
+
     def check_connection(self) -> bool:
         """
         Test S3 connection by listing buckets.

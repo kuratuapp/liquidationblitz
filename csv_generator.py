@@ -110,10 +110,9 @@ class CatalogGenerator:
         """
         summary = batch.summary
 
-        # Calculate final price with markup
-        base_price = summary.total_client_cost
-        markup_amount = base_price * (markup_percentage / 100.0)
-        final_price = base_price + markup_amount
+        # Get final price (markup already applied to batch if markup_percentage > 0)
+        # Note: batch.apply_markup() should be called BEFORE generating CSV
+        final_price = int(summary.total_client_cost)
 
         # Extract images (first 10 items)
         image_links = self._extract_images(batch, max_images=10)
@@ -139,7 +138,7 @@ class CatalogGenerator:
             'description': description,
             'availability': 'in stock',
             'condition': 'New',
-            'price': f"{final_price:.2f} USD",
+            'price': f"{final_price:,d} USD",
             'link': pdf_url,
             'image_link': primary_image,
             'brand': brand,

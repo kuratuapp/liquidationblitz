@@ -135,6 +135,11 @@ def finalize_batch_processing(batch, tmp_path, markup_percentage=0.0):
     try:
         s3_manager = get_s3_manager()
 
+        # Step 0: Apply markup to batch (updates item prices and batch total)
+        if markup_percentage > 0:
+            st.info(f"💰 Applying {markup_percentage}% markup to items...")
+            batch.apply_markup(markup_percentage)
+
         # Step 1: Upload images to S3
         st.info(f"📸 Uploading images for batch #{batch.summary.lot_number}...")
         image_urls = [item.image_url for item in batch.items if item.image_url]
@@ -145,7 +150,7 @@ def finalize_batch_processing(batch, tmp_path, markup_percentage=0.0):
             if idx < len(s3_image_urls) and s3_image_urls[idx]:
                 item.image_url = s3_image_urls[idx]
 
-        # Step 2: Generate PDF (now with S3 image URLs)
+        # Step 2: Generate PDF (now with S3 image URLs and markup applied)
         st.info(f"📄 Generating PDF...")
         pdf_generator = PDFGenerator()
         pdf_path = str(Config.OUTPUT_DIR / f"batch_{batch.summary.lot_number}.pdf")
@@ -192,11 +197,24 @@ def finalize_batch_processing(batch, tmp_path, markup_percentage=0.0):
 
 
 def delete_batches_from_catalog(batch_ids_to_delete):
-    """Delete selected batches from catalog."""
+    """Delete selected batches from catalog, S3 PDFs, and S3 images."""
     try:
+        s3_manager = get_s3_manager()
+
+        # Delete from S3 for each batch
+        for batch_id in batch_ids_to_delete:
+            st.info(f"🗑️ Deleting batch #{batch_id}...")
+
+            # Delete PDF from S3
+            st.info(f"  - Deleting PDF...")
+            s3_manager.delete_pdf_from_s3(batch_id)
+
+            # Delete images from S3
+            st.info(f"  - Deleting images...")
+            s3_manager.delete_images_from_s3(batch_id)
+
         # Load current catalog
         catalog_path = str(Config.TEMP_DIR / Config.CATALOG_FILENAME)
-        s3_manager = get_s3_manager()
         s3_manager.download_catalog_from_s3(catalog_path)
 
         # Read catalog
@@ -209,10 +227,13 @@ def delete_batches_from_catalog(batch_ids_to_delete):
         df.to_csv(catalog_path, index=False)
 
         # Upload to S3
+        st.info(f"  - Updating catalog...")
         catalog_url = s3_manager.upload_catalog_to_s3(catalog_path)
 
         # Update session state
         st.session_state.catalog_df = df
+
+        st.success(f"✅ Deleted {len(batch_ids_to_delete)} batch(es) successfully!")
 
         return True, catalog_url
 
@@ -347,15 +368,15 @@ def main():
                         st.write(f"**Location:** {batch.summary.location}")
 
                     with col2:
-                        st.write(f"**Base Cost:** ${base_price:,.2f}")
-                        st.write(f"**Markup:** +${markup_amount:,.2f} ({st.session_state.markup_percentage}%)")
-                        st.write(f"**Final Price:** ${final_price:,.2f}")
+                        st.write(f"**Base Cost:** ${int(base_price):,d}")
+                        st.write(f"**Markup:** +${int(markup_amount):,d} ({st.session_state.markup_percentage}%)")
+                        st.write(f"**Final Price:** ${int(final_price):,d}")
 
                     with col3:
                         profit = batch.summary.total_original_retail - final_price
                         savings_pct = (profit / batch.summary.total_original_retail * 100) if batch.summary.total_original_retail > 0 else 0
-                        st.write(f"**Original Retail:** ${batch.summary.total_original_retail:,.2f}")
-                        st.write(f"**Customer Savings:** ${profit:,.2f}")
+                        st.write(f"**Original Retail:** ${int(batch.summary.total_original_retail):,d}")
+                        st.write(f"**Customer Savings:** ${int(profit):,d}")
                         st.write(f"**Savings %:** {savings_pct:.1f}%")
 
             # Step 4: Generate PDF and Upload
@@ -393,9 +414,9 @@ def main():
                             with col1:
                                 st.write(f"**Category:** {result['category']}")
                                 st.write(f"**Units:** {result['units']}")
-                                st.write(f"**Base Cost:** ${result['base_price']:,.2f}")
+                                st.write(f"**Base Cost:** ${int(result['base_price']):,d}")
                                 st.write(f"**Markup:** {result['markup_percentage']}%")
-                                st.write(f"**Final Price:** ${result['final_price']:,.2f}")
+                                st.write(f"**Final Price:** ${int(result['final_price']):,d}")
                             with col2:
                                 st.write("**PDF URL:**")
                                 st.code(result['pdf_url'], language=None)
@@ -469,15 +490,19 @@ def main():
                     batch_ids_to_delete = df.loc[selected_indices, 'id'].tolist()
                     st.write("**Batches to delete:**", ", ".join(map(str, batch_ids_to_delete)))
 
+                    # Show what will be deleted
+                    st.info("**This will delete:**\n"
+                           "- Catalog entry (CSV row)\n"
+                           "- PDF file from S3\n"
+                           "- All images from S3")
+
                     col1, col2 = st.columns([1, 4])
                     with col1:
                         if st.button("🗑️ Delete Selected", type="primary"):
-                            success, catalog_url = delete_batches_from_catalog(batch_ids_to_delete)
-                            if success:
-                                st.success(f"✅ Deleted {len(batch_ids_to_delete)} batch(es)")
-                                st.rerun()
-                            else:
-                                st.error("❌ Failed to delete batches")
+                            with st.spinner("Deleting..."):
+                                success, catalog_url = delete_batches_from_catalog(batch_ids_to_delete)
+                                if success:
+                                    st.rerun()
                     with col2:
                         if st.button("Cancel"):
                             st.rerun()
