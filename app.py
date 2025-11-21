@@ -282,10 +282,10 @@ def main():
             st.metric("Total Batches", len(df))
 
             if len(df) > 0 and 'price' in df.columns:
-                # Parse prices
-                prices = df['price'].str.replace(' USD', '').astype(float)
+                # Parse prices (remove commas and USD)
+                prices = df['price'].str.replace(' USD', '').str.replace(',', '').astype(float)
                 total_value = prices.sum()
-                st.metric("Total Value", f"${total_value:,.2f}")
+                st.metric("Total Value", f"${int(total_value):,d}")
 
     # Main content tabs
     tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload & Review", "📋 Manage Catalog", "📊 View Catalog", "ℹ️ Help"])
