@@ -62,14 +62,13 @@ class S3Manager:
         s3_key = f"{Config.S3_PDF_PREFIX}batch-{batch_number}.pdf"
 
         try:
-            # Upload file with public-read ACL
+            # Upload file (public access controlled by bucket policy)
             self.s3_client.upload_file(
                 str(pdf_file),
                 Config.AWS_BUCKET_PDFS,
                 s3_key,
                 ExtraArgs={
-                    'ContentType': 'application/pdf',
-                    'ACL': 'public-read'
+                    'ContentType': 'application/pdf'
                 }
             )
 
@@ -143,14 +142,13 @@ class S3Manager:
         s3_key = f"{Config.S3_CATALOG_PREFIX}{Config.CATALOG_FILENAME}"
 
         try:
-            # Upload file with public-read ACL
+            # Upload file (public access controlled by bucket policy)
             self.s3_client.upload_file(
                 str(csv_file),
                 Config.AWS_BUCKET_CATALOG,
                 s3_key,
                 ExtraArgs={
-                    'ContentType': 'text/csv',
-                    'ACL': 'public-read'
+                    'ContentType': 'text/csv'
                 }
             )
 
@@ -200,13 +198,12 @@ class S3Manager:
             # S3 key (path in bucket)
             s3_key = f"{Config.S3_IMAGES_PREFIX}batch-{batch_number}/item-{item_index}_{image_hash}{ext}"
 
-            # Upload to S3
+            # Upload to S3 (public access controlled by bucket policy)
             self.s3_client.put_object(
                 Bucket=Config.AWS_BUCKET_IMAGES,
                 Key=s3_key,
                 Body=image_data,
-                ContentType=content_type,
-                ACL='public-read'
+                ContentType=content_type
             )
 
             # Generate public URL
