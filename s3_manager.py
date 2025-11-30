@@ -84,7 +84,7 @@ class S3Manager:
 
     def download_catalog_from_s3(self, local_path: Optional[str] = None) -> str:
         """
-        Download existing catalog CSV from S3.
+        Download existing catalog CSV from public S3 URL.
 
         Args:
             local_path: Optional local path to save file.
@@ -94,31 +94,33 @@ class S3Manager:
             Local path to downloaded catalog file
 
         Raises:
-            ClientError: If S3 download fails
+            Exception: If download fails
         """
         if local_path is None:
             local_path = str(Config.TEMP_DIR / Config.CATALOG_FILENAME)
 
-        # S3 key for catalog
-        s3_key = f"{Config.S3_CATALOG_PREFIX}{Config.CATALOG_FILENAME}"
-
         try:
-            self.s3_client.download_file(
-                Config.AWS_BUCKET_CATALOG,
-                s3_key,
-                local_path
-            )
-            logger.info(f"Catalog downloaded from S3: {local_path}")
-            return local_path
+            # Download from public URL using requests
+            response = requests.get(Config.CATALOG_PUBLIC_URL, timeout=30)
 
-        except ClientError as e:
-            # If file doesn't exist in S3, return path anyway (will create new)
-            if e.response['Error']['Code'] == '404':
-                logger.warning(f"Catalog not found in S3, will create new one")
+            if response.status_code == 200:
+                # Save to local file
+                with open(local_path, 'wb') as f:
+                    f.write(response.content)
+                logger.info(f"Catalog downloaded from public URL: {local_path}")
+                return local_path
+            elif response.status_code == 404:
+                # Catalog doesn't exist yet, will create new one
+                logger.warning(f"Catalog not found at public URL, will create new one")
                 return local_path
             else:
-                logger.error(f"Failed to download catalog from S3: {e}")
-                raise
+                logger.error(f"Failed to download catalog: HTTP {response.status_code}")
+                return local_path
+
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Could not download catalog from public URL: {e}")
+            logger.warning("Will create new catalog if needed")
+            return local_path
 
     def upload_catalog_to_s3(self, csv_path: str) -> str:
         """
@@ -152,11 +154,10 @@ class S3Manager:
                 }
             )
 
-            # Generate public URL
-            public_url = f"https://{Config.AWS_BUCKET_CATALOG}.s3.{Config.AWS_REGION}.amazonaws.com/{s3_key}"
-            logger.info(f"Catalog uploaded successfully: {public_url}")
+            # Return the public URL (same as CATALOG_PUBLIC_URL)
+            logger.info(f"Catalog uploaded successfully: {Config.CATALOG_PUBLIC_URL}")
 
-            return public_url
+            return Config.CATALOG_PUBLIC_URL
 
         except ClientError as e:
             logger.error(f"Failed to upload catalog to S3: {e}")

@@ -295,6 +295,9 @@ def main():
         st.header("Upload & Review Batches")
         st.markdown("Upload Excel files, review batch details, set markup, and generate PDF + Catalog.")
 
+        # Manifest Type Indicator
+        st.info("📋 **Manifest Type:** Macy's Manifests  \n_Other manifest types coming soon_")
+
         # Step 1: Upload Files
         st.subheader("Step 1: Upload Excel Files")
         uploaded_files = st.file_uploader(
@@ -336,19 +339,34 @@ def main():
             st.markdown("---")
             st.subheader("Step 2: Review Batches & Set Markup")
 
-            # Global markup setting
-            col1, col2 = st.columns([3, 1])
+            # Initialize individual markups if not exists
+            if 'individual_markups' not in st.session_state:
+                st.session_state.individual_markups = {}
+
+            # Markup mode toggle
+            col1, col2 = st.columns([2, 3])
             with col1:
-                st.session_state.markup_percentage = st.slider(
-                    "Markup Percentage (%)",
-                    min_value=0.0,
-                    max_value=100.0,
-                    value=st.session_state.markup_percentage,
-                    step=0.5,
-                    help="Set the markup percentage to add to the base cost"
+                markup_mode = st.radio(
+                    "Markup Mode:",
+                    options=["Global", "Individual"],
+                    horizontal=True,
+                    help="Global: Same markup for all batches | Individual: Custom markup per batch"
                 )
-            with col2:
-                st.metric("Markup", f"{st.session_state.markup_percentage}%")
+
+            # Global markup setting (only show if Global mode)
+            if markup_mode == "Global":
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.session_state.markup_percentage = st.slider(
+                        "Markup Percentage (%)",
+                        min_value=0.0,
+                        max_value=100.0,
+                        value=st.session_state.markup_percentage,
+                        step=0.5,
+                        help="Set the markup percentage to add to the base cost"
+                    )
+                with col2:
+                    st.metric("Markup", f"{st.session_state.markup_percentage}%")
 
             # Show batch details with pricing
             st.markdown("**Batch Details:**")
@@ -356,10 +374,38 @@ def main():
             for idx, batch_data in enumerate(st.session_state.batch_data):
                 batch = batch_data['batch']
                 base_price = batch.summary.total_client_cost
-                markup_amount = base_price * (st.session_state.markup_percentage / 100.0)
+                lot_number = str(batch.summary.lot_number)
+
+                # Initialize individual markup for this batch if not exists
+                if lot_number not in st.session_state.individual_markups:
+                    st.session_state.individual_markups[lot_number] = st.session_state.markup_percentage
+
+                # Determine which markup to use
+                if markup_mode == "Individual":
+                    current_markup = st.session_state.individual_markups[lot_number]
+                else:
+                    current_markup = st.session_state.markup_percentage
+
+                markup_amount = base_price * (current_markup / 100.0)
                 final_price = base_price + markup_amount
 
                 with st.expander(f"Batch #{batch.summary.lot_number} - {batch.summary.category}"):
+                    # Individual markup slider (only show in Individual mode)
+                    if markup_mode == "Individual":
+                        st.session_state.individual_markups[lot_number] = st.slider(
+                            f"Markup for Batch #{lot_number} (%)",
+                            min_value=0.0,
+                            max_value=100.0,
+                            value=st.session_state.individual_markups[lot_number],
+                            step=0.5,
+                            key=f"markup_{lot_number}",
+                            help="Set custom markup percentage for this batch"
+                        )
+                        # Recalculate with updated individual markup
+                        current_markup = st.session_state.individual_markups[lot_number]
+                        markup_amount = base_price * (current_markup / 100.0)
+                        final_price = base_price + markup_amount
+
                     col1, col2, col3 = st.columns(3)
 
                     with col1:
@@ -369,7 +415,7 @@ def main():
 
                     with col2:
                         st.write(f"**Base Cost:** ${int(base_price):,d}")
-                        st.write(f"**Markup:** +${int(markup_amount):,d} ({st.session_state.markup_percentage}%)")
+                        st.write(f"**Markup:** +${int(markup_amount):,d} ({current_markup}%)")
                         st.write(f"**Final Price:** ${int(final_price):,d}")
 
                     with col3:
@@ -392,10 +438,17 @@ def main():
                 for idx, batch_data in enumerate(st.session_state.batch_data):
                     batch = batch_data['batch']
                     tmp_path = batch_data['tmp_path']
+                    lot_number = str(batch.summary.lot_number)
 
                     status_text.text(f"Processing batch #{batch.summary.lot_number}...")
 
-                    result = finalize_batch_processing(batch, tmp_path, st.session_state.markup_percentage)
+                    # Use individual markup if available, otherwise use global
+                    if markup_mode == "Individual" and lot_number in st.session_state.individual_markups:
+                        batch_markup = st.session_state.individual_markups[lot_number]
+                    else:
+                        batch_markup = st.session_state.markup_percentage
+
+                    result = finalize_batch_processing(batch, tmp_path, batch_markup)
                     results.append(result)
 
                     progress_bar.progress((idx + 1) / len(st.session_state.batch_data))

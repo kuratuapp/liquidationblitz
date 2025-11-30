@@ -56,6 +56,7 @@ class Config:
 
     # Catalog Settings
     CATALOG_FILENAME = 'liquidationblitzcatalog.csv'
+    CATALOG_PUBLIC_URL = 'https://liquidation-blits-catalog.s3.us-east-1.amazonaws.com/liquidationblitzcatalog.csv'
 
     # Local Paths
     BASE_DIR = Path(__file__).resolve().parent

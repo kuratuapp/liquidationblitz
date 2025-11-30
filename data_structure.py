@@ -34,6 +34,35 @@ class BatchSummary:
     processed_date: datetime = field(default_factory=datetime.now)
     source_file: str = ""
 
+    # Shipping constants
+    SHIPPING_RATE_PER_KG: float = 15.50
+    SHIPPING_MIN_KG: float = 25.0
+    ESTIMATED_LBS_PER_PALLET: float = 750.0
+    LBS_TO_KG: float = 0.453592
+
+    @property
+    def estimated_weight_lbs(self) -> float:
+        """Estimate total weight in pounds based on number of pallets"""
+        if self.num_pallets > 0:
+            return self.num_pallets * self.ESTIMATED_LBS_PER_PALLET
+        # Fallback: estimate based on units (avg 2 lbs per apparel item)
+        return self.total_units * 2.0
+
+    @property
+    def estimated_weight_kg(self) -> float:
+        """Convert estimated weight to kilograms"""
+        return self.estimated_weight_lbs * self.LBS_TO_KG
+
+    @property
+    def chargeable_weight_kg(self) -> float:
+        """Get chargeable weight (minimum 25 kg)"""
+        return max(self.estimated_weight_kg, self.SHIPPING_MIN_KG)
+
+    @property
+    def estimated_shipping_cost(self) -> float:
+        """Calculate estimated shipping cost to Kenya"""
+        return self.chargeable_weight_kg * self.SHIPPING_RATE_PER_KG
+
 
 @dataclass
 class Item:

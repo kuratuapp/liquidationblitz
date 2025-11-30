@@ -159,7 +159,7 @@ class PDFGenerator:
 
         story = []
 
-        # 1. Cover page
+        # 1. Cover page with logo and contact
         story.extend(self._create_cover_page(batch.summary))
         story.append(PageBreak())
 
@@ -167,33 +167,52 @@ class PDFGenerator:
         story.extend(self._create_summary_page(batch))
         story.append(PageBreak())
 
-        # 3. Item catalog with images
+        # 3. Shipping information and total costs
+        story.extend(self._create_shipping_page(batch))
+        story.append(PageBreak())
+
+        # 4. Item catalog with images
         story.extend(self._create_image_catalog(batch.items))
+
+        # 5. Back page with QR code and contact
+        story.append(PageBreak())
+        story.extend(self._create_back_page())
 
         # Build PDF
         doc.build(story)
         return output_path
 
     def _create_cover_page(self, summary: BatchSummary) -> List:
-        """Create cover page with 'Liquidation Blitz' title and lot number"""
+        """Create cover page with logo, title, lot number, and contact info"""
         content = []
 
-        # Add some space from top
-        content.append(Spacer(1, 2*inch))
+        # Add logo at the top (moved higher up)
+        try:
+            logo_path = "Liquidation blitz.png"
+            if os.path.exists(logo_path):
+                logo = Image(logo_path, width=3.5*inch, height=3.5*inch, kind='proportional')
+                content.append(Spacer(1, 0.2*inch))
+                content.append(logo)
+                content.append(Spacer(1, 0.15*inch))
+            else:
+                content.append(Spacer(1, 1*inch))
+        except Exception as e:
+            print(f"Could not load logo: {e}")
+            content.append(Spacer(1, 1*inch))
 
         # Main title
         title = "Liquidation Blitz"
         content.append(Paragraph(title, self.styles['CoverTitle']))
 
-        # Add space between title and lot number
-        content.append(Spacer(1, 0.8*inch))
+        # Reduced space between title and lot number
+        content.append(Spacer(1, 0.2*inch))
 
         # Lot number
         lot_text = f"Lot #{summary.lot_number}"
         content.append(Paragraph(lot_text, self.styles['CoverLot']))
 
-        # Add some decorative space
-        content.append(Spacer(1, 1*inch))
+        # Reduced space before category
+        content.append(Spacer(1, 0.2*inch))
 
         # Category and date info
         info_text = f"""
@@ -206,8 +225,8 @@ class PDFGenerator:
         """
         content.append(Paragraph(info_text, self.styles['LargeBody']))
 
-        # Add space and sale notice
-        content.append(Spacer(1, 0.5*inch))
+        # Reduced space before sale notice
+        content.append(Spacer(1, 0.25*inch))
 
         sale_notice = """
         <para alignment="center">
@@ -216,6 +235,18 @@ class PDFGenerator:
         </para>
         """
         content.append(Paragraph(sale_notice, self.styles['LargeBody']))
+
+        # Add space before contact
+        content.append(Spacer(1, 0.6*inch))
+
+        # Add contact information at bottom (larger size)
+        contact_info = """
+        <para alignment="center">
+        <font size="20" color="#1a1a1a"><b>Contact Us</b></font><br/>
+        <font size="18" color="#1565c0"><b>+254 75 994 5924</b></font>
+        </para>
+        """
+        content.append(Paragraph(contact_info, self.styles['LargeBody']))
 
         return content
 
@@ -429,6 +460,144 @@ class PDFGenerator:
         """
 
         return Paragraph(details_html, self.styles['ItemDetail'])
+
+    def _create_shipping_page(self, batch: LiquidationBatch) -> List:
+        """Create shipping information page"""
+        content = []
+
+        # Shipping to Kenya section
+        content.append(Paragraph("Shipping to Kenya", self.styles['SectionHeader']))
+        content.append(Spacer(1, 0.3*inch))
+
+        # Calculate shipping details
+        est_weight_lbs = batch.summary.estimated_weight_lbs
+        est_weight_kg = batch.summary.estimated_weight_kg
+        chargeable_kg = batch.summary.chargeable_weight_kg
+        shipping_cost = batch.summary.estimated_shipping_cost
+
+        shipping_data = [
+            ['Item', 'Details'],
+            ['Estimated Weight', f"{int(est_weight_lbs):,} lbs ({est_weight_kg:.1f} kg)"],
+            ['Chargeable Weight', f"{chargeable_kg:.1f} kg"],
+            ['Shipping Rate', f"$15.50 per kg"],
+            ['Estimated Shipping Cost', f"${int(shipping_cost):,d}"],
+            ['Delivery Time', '10-14 days'],
+        ]
+
+        shipping_table = Table(shipping_data, colWidths=[2.8*inch, 2*inch])
+        shipping_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 14),
+            ('GRID', (0, 0), (-1, -1), 1.5, colors.black),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f0f0f0')),
+            ('TOPPADDING', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ]))
+
+        content.append(shipping_table)
+
+        # Shipping disclaimer
+        content.append(Spacer(1, 0.3*inch))
+        shipping_disclaimer = """
+        <para alignment="left">
+        <font size="11" color="#666666"><i><b>Important Notice:</b> Shipping costs are estimates based on weight approximation.
+        Actual costs may vary and will be confirmed before shipment. Rate includes duties and taxes.
+        Delivery times are estimates and delays may occur due to unforeseen weather conditions or customs clearance.</i></font>
+        </para>
+        """
+        content.append(Paragraph(shipping_disclaimer, self.styles['LargeBody']))
+
+        # Total Cost Summary
+        content.append(Spacer(1, 0.5*inch))
+        content.append(Paragraph("Total Cost Summary", self.styles['SectionHeader']))
+        content.append(Spacer(1, 0.2*inch))
+
+        # Calculate totals
+        client_cost = sum(item.total_client_cost for item in batch.items)
+        total_cost = client_cost + shipping_cost
+
+        total_data = [
+            ['Description', 'Amount'],
+            ['Batch Price', f"${int(client_cost):,d}"],
+            ['Estimated Shipping', f"${int(shipping_cost):,d}"],
+            ['Total Estimated Cost', f"${int(total_cost):,d}"],
+        ]
+
+        total_table = Table(total_data, colWidths=[2.8*inch, 2*inch])
+        total_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 14),
+            ('GRID', (0, 0), (-1, -1), 1.5, colors.black),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f0f0f0')),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e8f5e9')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, -1), (-1, -1), 16),
+            ('TOPPADDING', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ]))
+
+        content.append(total_table)
+
+        return content
+
+    def _create_back_page(self) -> List:
+        """Create back page with QR code and contact information"""
+        content = []
+
+        # Add space from top
+        content.append(Spacer(1, 2*inch))
+
+        # Contact header
+        contact_header = """
+        <para alignment="center">
+        <font size="24" color="#1a1a1a"><b>Contact Us</b></font>
+        </para>
+        """
+        content.append(Paragraph(contact_header, self.styles['LargeBody']))
+        content.append(Spacer(1, 0.5*inch))
+
+        # Add QR code
+        try:
+            qr_path = "Liquidation blitz qrcode.png"
+            if os.path.exists(qr_path):
+                qr_code = Image(qr_path, width=3*inch, height=3*inch, kind='proportional')
+                content.append(qr_code)
+                content.append(Spacer(1, 0.3*inch))
+        except Exception as e:
+            print(f"Could not load QR code: {e}")
+            content.append(Spacer(1, 0.3*inch))
+
+        # Phone number
+        phone_info = """
+        <para alignment="center">
+        <font size="18" color="#1565c0"><b>+254 75 994 5924</b></font><br/>
+        <font size="14" color="#666666">Scan QR code or call us for inquiries</font>
+        </para>
+        """
+        content.append(Paragraph(phone_info, self.styles['LargeBody']))
+
+        # Thank you message
+        content.append(Spacer(1, 0.5*inch))
+        thank_you = """
+        <para alignment="center">
+        <font size="16" color="#1a1a1a"><b>Thank you for your interest!</b></font>
+        </para>
+        """
+        content.append(Paragraph(thank_you, self.styles['LargeBody']))
+
+        return content
 
 
 # Example usage
