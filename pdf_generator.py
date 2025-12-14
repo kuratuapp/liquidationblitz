@@ -437,9 +437,6 @@ class PDFGenerator:
 
     def _get_item_details(self, item: Item):
         """Get formatted item details"""
-        # Calculate profit margin
-        profit_margin = ((item.original_retail - item.client_cost) / item.original_retail * 100) if item.original_retail > 0 else 0
-
         details_html = f"""
         <font size="14" color="#1a1a1a"><b>{item.description}</b></font><br/>
         <br/>
@@ -449,10 +446,7 @@ class PDFGenerator:
         <b>Size:</b> {item.size}<br/>
         <b>Color:</b> {item.color}<br/>
         <br/>
-        <b>Client Cost:</b> <font color="#d32f2f">${int(item.client_cost):,d}</font> <font color="#666666">(each)</font><br/>
-        <b>Total Cost:</b> <font color="#d32f2f">${int(item.total_client_cost):,d}</font><br/>
-        <b>Original Retail:</b> <font color="#666666">${int(item.original_retail):,d}</font> <font color="#666666">(each)</font><br/>
-        <b>Savings:</b> <font color="#2e7d32">{profit_margin:.0f}% off retail</font><br/>
+        <b>Original Retail:</b> <font color="#2e7d32">${int(item.original_retail):,d}</font> <font color="#666666">(each)</font><br/>
         <br/>
         <b>Vendor:</b> {item.vendor_name.split('/')[0] if '/' in item.vendor_name else item.vendor_name}<br/>
         <b>Style #:</b> {item.vendor_style}
@@ -474,10 +468,19 @@ class PDFGenerator:
         est_weight_kg = batch.summary.estimated_weight_kg
         chargeable_kg = batch.summary.chargeable_weight_kg
         shipping_cost = batch.summary.estimated_shipping_cost
+        is_estimated = batch.summary.is_weight_estimated
+
+        # Display weight - show "N/A" if not available from Excel
+        if is_estimated:
+            weight_display = "N/A"
+            weight_label = "Weight"
+        else:
+            weight_display = f"{int(est_weight_lbs):,} lbs ({est_weight_kg:.1f} kg)"
+            weight_label = "Actual Weight"
 
         shipping_data = [
             ['Item', 'Details'],
-            ['Estimated Weight', f"{int(est_weight_lbs):,} lbs ({est_weight_kg:.1f} kg)"],
+            [weight_label, weight_display],
             ['Chargeable Weight', f"{chargeable_kg:.1f} kg"],
             ['Shipping Rate', f"$15.50 per kg"],
             ['Estimated Shipping Cost', f"${int(shipping_cost):,d}"],
@@ -504,13 +507,23 @@ class PDFGenerator:
 
         # Shipping disclaimer
         content.append(Spacer(1, 0.3*inch))
-        shipping_disclaimer = """
-        <para alignment="left">
-        <font size="11" color="#666666"><i><b>Important Notice:</b> Shipping costs are estimates based on weight approximation.
-        Actual costs may vary and will be confirmed before shipment. Rate includes duties and taxes.
-        Delivery times are estimates and delays may occur due to unforeseen weather conditions or customs clearance.</i></font>
-        </para>
-        """
+        if is_estimated:
+            shipping_disclaimer = """
+            <para alignment="left">
+            <font size="11" color="#666666"><i><b>Important Notice:</b> Weight information not available from manifest.
+            Shipping costs shown are estimates based on weight approximation.
+            Actual costs may vary and will be confirmed before shipment. Rate includes duties and taxes.
+            Delivery times are estimates and delays may occur due to unforeseen weather conditions or customs clearance.</i></font>
+            </para>
+            """
+        else:
+            shipping_disclaimer = """
+            <para alignment="left">
+            <font size="11" color="#666666"><i><b>Important Notice:</b> Shipping costs are estimates based on actual weight.
+            Actual costs may vary and will be confirmed before shipment. Rate includes duties and taxes.
+            Delivery times are estimates and delays may occur due to unforeseen weather conditions or customs clearance.</i></font>
+            </para>
+            """
         content.append(Paragraph(shipping_disclaimer, self.styles['LargeBody']))
 
         # Total Cost Summary

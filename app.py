@@ -390,6 +390,36 @@ def main():
                 final_price = base_price + markup_amount
 
                 with st.expander(f"Batch #{batch.summary.lot_number} - {batch.summary.category}"):
+                    # Weight input section (show if weight is estimated)
+                    if batch.summary.is_weight_estimated:
+                        st.warning(f"⚠️ Weight is estimated ({int(batch.summary.estimated_weight_lbs)} lbs). Enter actual weight for accurate shipping cost.")
+
+                        # Initialize weight in session state if not exists
+                        if 'batch_weights' not in st.session_state:
+                            st.session_state.batch_weights = {}
+
+                        weight_col1, weight_col2 = st.columns([2, 1])
+                        with weight_col1:
+                            manual_weight = st.number_input(
+                                f"Actual Weight for Batch #{lot_number} (lbs)",
+                                min_value=0.0,
+                                value=float(st.session_state.batch_weights.get(lot_number, 0.0)),
+                                step=10.0,
+                                key=f"weight_{lot_number}",
+                                help="Enter the actual weight in pounds from shipping documents"
+                            )
+                            st.session_state.batch_weights[lot_number] = manual_weight
+
+                            # Update batch weight if user entered a value
+                            if manual_weight > 0:
+                                batch.summary.total_weight_lbs = manual_weight
+
+                        with weight_col2:
+                            if manual_weight > 0:
+                                st.metric("Weight (kg)", f"{manual_weight * 0.453592:.1f}")
+                    else:
+                        st.success(f"✓ Actual weight: {int(batch.summary.total_weight_lbs)} lbs ({batch.summary.estimated_weight_kg:.1f} kg)")
+
                     # Individual markup slider (only show in Individual mode)
                     if markup_mode == "Individual":
                         st.session_state.individual_markups[lot_number] = st.slider(

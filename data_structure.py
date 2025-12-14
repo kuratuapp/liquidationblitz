@@ -29,6 +29,7 @@ class BatchSummary:
     total_units: int = 0
     total_client_cost: float = 0.0
     avg_unit_client_cost: Optional[float] = None
+    total_weight_lbs: float = 0.0  # Actual weight from Excel or user input
 
     # Additional metadata
     processed_date: datetime = field(default_factory=datetime.now)
@@ -42,11 +43,20 @@ class BatchSummary:
 
     @property
     def estimated_weight_lbs(self) -> float:
-        """Estimate total weight in pounds based on number of pallets"""
+        """Get weight in pounds - uses actual weight if available, otherwise estimates"""
+        # Priority 1: Use actual weight from Excel or user input
+        if self.total_weight_lbs > 0:
+            return self.total_weight_lbs
+        # Priority 2: Estimate based on pallets
         if self.num_pallets > 0:
             return self.num_pallets * self.ESTIMATED_LBS_PER_PALLET
-        # Fallback: estimate based on units (avg 2 lbs per apparel item)
+        # Priority 3: Fallback estimate based on units (avg 2 lbs per apparel item)
         return self.total_units * 2.0
+
+    @property
+    def is_weight_estimated(self) -> bool:
+        """Check if weight is estimated or actual"""
+        return self.total_weight_lbs == 0
 
     @property
     def estimated_weight_kg(self) -> float:
@@ -182,6 +192,16 @@ class BatchProcessor:
         # Parse items (starting from row 8 = headers, row 9+ = data)
         items = BatchProcessor._parse_items(df_raw)
 
+        # Extract weight if available (support multiple column name variants)
+        weight_lbs = 0.0
+        for weight_col in ['WEIGHT (LBS)', 'WEIGHT', 'TOTAL WEIGHT (LBS)', 'TOTAL WEIGHT']:
+            if weight_col in batch_data and pd.notna(batch_data[weight_col]):
+                try:
+                    weight_lbs = float(batch_data[weight_col])
+                    break
+                except (ValueError, TypeError):
+                    pass
+
         # Create batch summary object
         summary = BatchSummary(
             location=batch_data.get('LOCATION', ''),
@@ -198,6 +218,7 @@ class BatchProcessor:
             total_units=int(batch_data.get('# OF UNITS', 0)),
             total_client_cost=float(batch_data.get('TOTAL CLIENT COST', 0)),
             avg_unit_client_cost=batch_data.get('AVG. UNIT CLIENT COST'),
+            total_weight_lbs=weight_lbs,
             source_file=file_path
         )
 
